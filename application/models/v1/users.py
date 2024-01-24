@@ -21,7 +21,7 @@ class Users(db.Model, SerializerMixin):
     password = db.Column(db.String(255), nullable=False)
     login_attempts = db.Column(db.Integer(), nullable=True, default=0)
     is_active = db.Column(db.Boolean(), default=True)
-    account_type = db.Column(db.Enum(AccountType), default=AccountType.TEAM_MEMBER)
+    account_type = db.Column(db.Enum(AccountType), default=AccountType.USER)
     date_created = db.Column(db.Date(), default=date.today())
     date_updated = db.Column(db.Date(), onupdate=date.today())
 
@@ -55,21 +55,21 @@ class Users(db.Model, SerializerMixin):
     @classmethod
     def get_user_data_by_email(cls, email):
         user = cls.find_by_email(email)
-        return None if user is None else user.to_dict(only=('first_name', 'last_name', 'phone', 'email',
+        return None if user is None else user.to_dict(only=('first_name', 'last_name', 'email',
                                                             'is_active', 'account_type', 'date_created',
                                                             'date_updated'))
 
     @classmethod
     def get_user_data_by_id(cls, user_id):
         user = cls.find_by_user_id(user_id)
-        return None if user is None else user.to_dict(only=('first_name', 'last_name', 'phone', 'email',
+        return None if user is None else user.to_dict(only=('first_name', 'last_name', 'email',
                                                             'is_active', 'account_type', 'date_created',
                                                             'date_updated'))
 
     @classmethod
     def get_all_users_data(cls):
         users = cls.query.all()
-        return [user.to_dict(only=('first_name', 'last_name', 'phone', 'email',
+        return [user.to_dict(only=('first_name', 'last_name', 'email',
                                    'login_attempts', 'is_active', 'account_type'))
                 for user in users]
 
