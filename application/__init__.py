@@ -4,6 +4,7 @@ from flask import Flask, make_response, jsonify
 from flask_restx import Api
 from flask_bcrypt import Bcrypt
 from flask_migrate import Migrate
+from flask_jwt_extended import JWTManager
 from .config.v1.config import config_dict
 from .controllers.v1.auth import auth_namespace
 from .utils import db
@@ -17,6 +18,7 @@ def create_app(config=config_dict['dev']):
     db.init_app(app)
     migrate = Migrate(app, db)
     bcrypt = Bcrypt(app)
+    jwt = JWTManager(app)
 
     # Routes
     api.add_namespace(auth_namespace, path="/api/v1/auth")

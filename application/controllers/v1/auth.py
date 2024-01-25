@@ -1,9 +1,11 @@
 import re
 from http import HTTPStatus
 from flask import make_response, jsonify
+from flask_jwt_extended import create_refresh_token, create_access_token, decode_token
 from flask_restx import Resource, Namespace, fields
 from application.models.v1.users import Users, AccountType
 from application.utils.apiError import ApiError
+from application.utils.utils_func import add_token_to_database
 
 auth_namespace = Namespace("Auth", description="A namespace for authentication")
 
@@ -54,11 +56,58 @@ class RegisterUser(Resource):
 class LoginUser(Resource):
     @auth_namespace.expect(login_user_model, validate=True)
     def post(self):
-        response = {
-            "is_success": True,
-            "msg": "User logged in successfully",
-        }
-        return make_response(jsonify(response), HTTPStatus.OK)
+        email = auth_namespace.payload.get("email")
+        password = auth_namespace.payload.get("password").encode('utf-8')
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+            raise ApiError('Invalid email format.', HTTPStatus.BAD_REQUEST)
+        user = Users.find_by_email(email)
+        if user is None:
+            raise ApiError("Invalid email or password", HTTPStatus.BAD_REQUEST)
+        elif user:
+            if user.is_active is False:
+                raise ApiError("Account has been blocked for violating terms and conditions. Kindly contact "
+                               "administrators. Thank you", HTTPStatus.FORBIDDEN)
+            if user.login_attempts >= 5:
+                raise ApiError("Account has blocked due to maximum number of failed login attempts",
+                               HTTPStatus.FORBIDDEN)
+            if user and user.check_password(password):
+                account_type = None
+                match user.account_type:
+                    case AccountType.USER:
+                        account_type = "user"
+                    case AccountType.ADMIN:
+                        account_type = "admin"
+                    case AccountType.SUPER_ADMIN:
+                        account_type = "super-admin"
+                identity = {"id": user.id, "account_type": account_type}
+                access_token = create_access_token(identity=identity)
+                refresh_token_sibling = decode_token(access_token)
+                refresh_token_sibling_jti = refresh_token_sibling['jti']
+                refresh_token = create_refresh_token(identity=identity)
+                access_token_sibling = decode_token(refresh_token)
+                access_token_sibling_jti = access_token_sibling['jti']
+                add_token_to_database(token=access_token, sibling_jti=access_token_sibling_jti,
+                                      owners_id=user.id, owners_account_type="User")
+                add_token_to_database(token=refresh_token, sibling_jti=refresh_token_sibling_jti,
+                                      owners_id=user.id, owners_account_type="User")
+                user.login_attempts = 0
+                user.save_to_db()
+                user = user.get_user_data_by_email(email)
+
+                response = {
+                    "is_success": True,
+                    "msg": "Login Successful",
+                    "data": {
+                        "access_token": access_token,
+                        "refresh_token": refresh_token,
+                        "user": user
+                    }
+                }
+                return make_response(jsonify(response), HTTPStatus.OK)
+            else:
+                user.login_attempts += 1
+                user.save_to_db()
+                raise ApiError("Invalid email or password", HTTPStatus.BAD_REQUEST)
 
 
 @auth_namespace.route("/logout")
